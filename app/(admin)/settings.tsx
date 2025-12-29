@@ -4,6 +4,7 @@ import { ArrowLeft, User, Lock, Moon, Bell, HelpCircle, Bug, LogOut, ChevronRigh
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useColorScheme } from 'nativewind';
+/**/
 
 export default function Settings() {
     const router = useRouter();
