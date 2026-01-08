@@ -1,21 +1,25 @@
-import { TextInput, View, Text } from 'react-native';
+import { TextInput, View, Text, TextInputProps } from 'react-native';
 import { useColorScheme } from 'nativewind';
 
-interface InputProps {
+interface InputProps extends TextInputProps {
     label?: string;
-    placeholder?: string;
-    value: string;
-    onChangeText: (text: string) => void;
-    secureTextEntry?: boolean;
     className?: string;
     leftIcon?: React.ReactNode;
     rightIcon?: React.ReactNode;
     forceLightMode?: boolean;
-    placeholderTextColor?: string;
     isDark?: boolean;
 }
 
-export default function Input({ label, placeholder, value, onChangeText, secureTextEntry, className, leftIcon, rightIcon, forceLightMode, placeholderTextColor, isDark: externalIsDark }: InputProps) {
+export default function Input({
+    label,
+    className,
+    leftIcon,
+    rightIcon,
+    forceLightMode,
+    isDark: externalIsDark,
+    placeholderTextColor,
+    ...props
+}: InputProps) {
     const { colorScheme } = useColorScheme();
     const isDark = externalIsDark ?? (!forceLightMode && colorScheme === 'dark');
 
@@ -26,11 +30,8 @@ export default function Input({ label, placeholder, value, onChangeText, secureT
                 {leftIcon && <View className="mr-3">{leftIcon}</View>}
                 <TextInput
                     className={`flex-1 text-base h-full ${isDark ? 'text-white' : 'text-gray-900'}`}
-                    placeholder={placeholder}
                     placeholderTextColor={placeholderTextColor || (isDark ? "#6B7280" : "#9CA3AF")}
-                    value={value}
-                    onChangeText={onChangeText}
-                    secureTextEntry={secureTextEntry}
+                    {...props}
                 />
                 {rightIcon && <View className="ml-3">{rightIcon}</View>}
             </View>

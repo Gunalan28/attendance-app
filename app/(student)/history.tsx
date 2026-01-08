@@ -1,128 +1,139 @@
-import React, { useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, CheckCircle2, XCircle, Clock, Filter } from 'lucide-react-native';
+import { Calendar as CalendarIcon, Filter, CheckCircle, XCircle, Clock } from 'lucide-react-native';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useStudentTheme } from '../../components/context/StudentContext';
+import { useAuth } from '../../components/context/AuthContext';
+import { api } from '../../services/api';
 
-const days = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const calendarDays = [
-    { day: 1, type: 'inactive' }, { day: 2, type: 'inactive' }, { day: 1, type: 'present' }, { day: 2, type: 'present' }, { day: 3, type: 'present' }, { day: 4, type: 'absent' }, { day: 5, type: 'present' },
-    { day: 6, type: 'present' }, { day: 7, type: 'holiday' }, { day: 8, type: 'present' }, { day: 9, type: 'present' }, { day: 10, type: 'late' }, { day: 11, type: 'present' }, { day: 12, type: 'present' },
-    { day: 13, type: 'holiday' }, { day: 14, type: 'present' }, { day: 15, type: 'present' }, { day: 16, type: 'absent' }, { day: 17, type: 'present' }, { day: 18, type: 'present' }, { day: 19, type: 'present' },
-    { day: 20, type: 'holiday' }, { day: 21, type: 'present' }, { day: 22, type: 'present' }, { day: 23, type: 'present' }, { day: 24, type: 'absent' }, { day: 25, type: 'present' }, { day: 26, type: 'future' },
-    { day: 27, type: 'future' }, { day: 28, type: 'future' }, { day: 29, type: 'future' }, { day: 30, type: 'future' },
-];
+const DEMO_STUDENT_ID = 3;
 
 export default function StudentHistory() {
     const { isDark } = useStudentTheme();
+    const { user } = useAuth();
+    const studentId = user?.id || DEMO_STUDENT_ID;
 
-    const stats = useMemo(() => [
-        { label: 'Attendance Rate', value: '85%', color: isDark ? '#60A5FA' : '#2563EB', bg: 'bg-blue-50 dark:bg-blue-900/20', icon: CheckCircle2 },
-        { label: 'Present', value: '24', color: isDark ? '#4ADE80' : '#16A34A', bg: 'bg-green-50 dark:bg-green-900/20', icon: CheckCircle2 },
-        { label: 'Absent', value: '04', color: isDark ? '#EF4444' : '#DC2626', bg: 'bg-red-50 dark:bg-red-900/20', icon: XCircle },
-    ], [isDark]);
+    const [attendanceHistory, setAttendanceHistory] = useState([]);
+    const [refreshing, setRefreshing] = useState(false);
 
-    const historyData = useMemo(() => [
-        { date: 'Today, 25 Sep', subject: 'Linear Algebra', status: 'Present', time: '09:00 AM - 10:30 AM', color: isDark ? '#4ADE80' : '#16A34A', textClass: 'text-green-600 dark:text-green-400', bgColor: 'bg-green-100 dark:bg-green-900/30' },
-        { date: 'Today, 25 Sep', subject: 'Computer Science', status: 'Present', time: '11:00 AM - 12:30 PM', color: isDark ? '#4ADE80' : '#16A34A', textClass: 'text-green-600 dark:text-green-400', bgColor: 'bg-green-100 dark:bg-green-900/30' },
-        { date: 'Yesterday, 24 Sep', subject: 'Data Structures', status: 'Absent', time: '02:00 PM - 03:30 PM', color: isDark ? '#EF4444' : '#DC2626', textClass: 'text-red-600 dark:text-red-400', bgColor: 'bg-red-100 dark:bg-red-900/30' },
-        { date: 'Yesterday, 24 Sep', subject: 'Physics Layer', status: 'Present', time: '09:00 AM - 10:30 AM', color: isDark ? '#4ADE80' : '#16A34A', textClass: 'text-green-600 dark:text-green-400', bgColor: 'bg-green-100 dark:bg-green-900/30' },
-        { date: 'Mon, 23 Sep', subject: 'Chemistry', status: 'Late', time: '09:15 AM - 10:30 AM', color: isDark ? '#FB923C' : '#EA580C', textClass: 'text-orange-600 dark:text-orange-400', bgColor: 'bg-orange-100 dark:bg-orange-900/30' },
-    ], [isDark]);
+    const loadHistory = async () => {
+        try {
+            const data = await api.getStudentHistory(studentId);
+            setAttendanceHistory(data);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        loadHistory().finally(() => setRefreshing(false));
+    }, [studentId]);
+
+    useEffect(() => {
+        loadHistory();
+    }, [studentId]);
+
+    // Calculate dynamic stats
+    const stats = useMemo(() => {
+        let present = 0, absent = 0, late = 0;
+        attendanceHistory.forEach(record => {
+            if (record.status === 'Present') present++;
+            else if (record.status === 'Absent') absent++;
+            else if (record.status === 'Late') late++;
+        });
+        const total = attendanceHistory.length;
+        const rate = total > 0 ? Math.round((present / total) * 100) : 0;
+        return [
+            { label: 'Present', value: present, color: '#16A34A', bg: 'bg-green-100', darkBg: 'bg-green-900/30', darkText: '#4ADE80' },
+            { label: 'Absent', value: absent, color: '#DC2626', bg: 'bg-red-100', darkBg: 'bg-red-900/30', darkText: '#F87171' },
+            { label: 'Late', value: late, color: '#D97706', bg: 'bg-orange-100', darkBg: 'bg-orange-900/30', darkText: '#FBBF24' },
+            { label: 'Rate', value: `${rate}%`, color: '#2563EB', bg: 'bg-blue-100', darkBg: 'bg-blue-900/30', darkText: '#60A5FA' },
+        ];
+    }, [attendanceHistory]);
+
+
+    const getStatusInfo = (status) => {
+        switch (status) {
+            case 'Present': return { icon: CheckCircle, color: '#16A34A', bg: 'bg-green-50', text: 'text-green-700', darkColor: '#4ADE80', darkBg: 'bg-green-900/20', darkText: 'text-green-400' };
+            case 'Absent': return { icon: XCircle, color: '#DC2626', bg: 'bg-red-50', text: 'text-red-700', darkColor: '#F87171', darkBg: 'bg-red-900/20', darkText: 'text-red-400' };
+            case 'Late': return { icon: Clock, color: '#D97706', bg: 'bg-orange-50', text: 'text-orange-700', darkColor: '#FBBF24', darkBg: 'bg-orange-900/20', darkText: 'text-orange-400' };
+            default: return { icon: CheckCircle, color: '#9CA3AF', bg: 'bg-gray-50', text: 'text-gray-700', darkColor: '#D1D5DB', darkBg: 'bg-gray-800', darkText: 'text-gray-400' };
+        }
+    };
 
     return (
-        <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
+        <SafeAreaView className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
             {/* Header */}
-            <View className="px-5 pt-4 pb-2 flex-row justify-between items-center">
-                <Text className="text-2xl font-bold text-gray-900 dark:text-white">Attendance</Text>
-                <TouchableOpacity className="bg-white dark:bg-gray-800 p-2 rounded-full shadow-sm">
+            <View className={`px-5 py-4 flex-row justify-between items-center ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+                <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Attendance History</Text>
+                <TouchableOpacity className={`p-2 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                     <Filter size={20} color={isDark ? "#E5E7EB" : "#374151"} />
                 </TouchableOpacity>
             </View>
 
-            <ScrollView className="flex-1 px-5 pt-4" showsVerticalScrollIndicator={false}>
-
+            <ScrollView
+                className="flex-1 px-5 pt-6"
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            >
                 {/* Stats Cards */}
-                <View className="flex-row justify-between mb-6">
-                    {stats.map((item, index) => (
-                        <View key={index} className="bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex-1 mx-1 items-center">
-                            <View className={`p-2 rounded-full mb-2 ${item.bg}`}>
-                                <item.icon size={16} color={item.color} />
+                <View className="flex-row justify-between mb-8 flex-wrap gap-y-3">
+                    {stats.map((stat, index) => (
+                        <View key={index} className={`w-[48%] p-4 rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-sm border ${isDark ? 'border-gray-700' : 'border-gray-100'}`}>
+                            <View className={`w-8 h-8 rounded-lg items-center justify-center mb-3 ${isDark ? stat.darkBg : stat.bg}`}>
+                                <Text className="font-bold text-xs" style={{ color: isDark ? stat.darkText : stat.color }}>
+                                    {String(stat.label).charAt(0)}
+                                </Text>
                             </View>
-                            <Text className="text-xl font-bold text-gray-900 dark:text-white">{item.value}</Text>
-                            <Text className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 mt-1">{item.label}</Text>
+                            <Text className={`text-2xl font-bold mb-0.5 ${isDark ? 'text-white' : 'text-gray-900'}`}>{stat.value}</Text>
+                            <Text className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{stat.label}</Text>
                         </View>
                     ))}
                 </View>
 
-                {/* Calendar View */}
-                <View className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6">
-                    <View className="flex-row justify-between items-center mb-4">
-                        <Text className="text-lg font-bold text-gray-900 dark:text-white">September 2023</Text>
-                        <View className="flex-row space-x-2">
-                            <TouchableOpacity className="p-1 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                                <ChevronLeft size={20} color={isDark ? "#9CA3AF" : "#6B7280"} />
-                            </TouchableOpacity>
-                            <TouchableOpacity className="p-1 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                                <ChevronRight size={20} color={isDark ? "#9CA3AF" : "#6B7280"} />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+                {/* List Header */}
+                <Text className={`text-lg font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>Recent Records</Text>
 
-                    <View className="flex-row justify-between mb-2">
-                        {days.map((day, index) => (
-                            <Text key={index} className="w-8 text-center text-xs font-bold text-gray-400 dark:text-gray-500">{day}</Text>
-                        ))}
-                    </View>
-                    <View className="flex-row flex-wrap justify-between">
-                        {calendarDays.map((day, index) => (
-                            <View key={index} className="w-8 h-8 items-center justify-center mb-1">
-                                <View className={`w-7 h-7 rounded-full items-center justify-center 
-                                    ${day.type === 'present' ? 'bg-green-100 dark:bg-green-900/30' :
-                                        day.type === 'absent' ? 'bg-red-100 dark:bg-red-900/30' :
-                                            day.type === 'late' ? 'bg-orange-100 dark:bg-orange-900/30' :
-                                                day.type === 'holiday' ? 'bg-gray-100 dark:bg-gray-700' : 'bg-transparent'}`}>
-                                    <Text className={`text-xs font-medium 
-                                        ${day.type === 'present' ? 'text-green-700 dark:text-green-400' :
-                                            day.type === 'absent' ? 'text-red-700 dark:text-red-400' :
-                                                day.type === 'late' ? 'text-orange-700 dark:text-orange-400' :
-                                                    day.type === 'holiday' ? 'text-gray-500 dark:text-gray-400' :
-                                                        day.type === 'inactive' ? 'text-gray-200 dark:text-gray-600' : 'text-gray-900 dark:text-white'}`}>{day.day}</Text>
-                                </View>
-                            </View>
-                        ))}
-                    </View>
-                    <View className="flex-row justify-center mt-3 space-x-4">
-                        <View className="flex-row items-center"><View className="w-2 h-2 rounded-full bg-green-500 dark:bg-green-400 mr-1" /><Text className="text-[10px] text-gray-500 dark:text-gray-400">Present</Text></View>
-                        <View className="flex-row items-center"><View className="w-2 h-2 rounded-full bg-red-500 dark:bg-red-400 mr-1" /><Text className="text-[10px] text-gray-500 dark:text-gray-400">Absent</Text></View>
-                        <View className="flex-row items-center"><View className="w-2 h-2 rounded-full bg-orange-500 dark:bg-orange-400 mr-1" /><Text className="text-[10px] text-gray-500 dark:text-gray-400">Late</Text></View>
-                    </View>
-                </View>
-
-                {/* Recent History */}
+                {/* History List */}
                 <View className="pb-8">
-                    <Text className="text-lg font-bold text-gray-900 dark:text-white mb-3">Recent History</Text>
-                    {historyData.map((item, index) => (
-                        <View key={index} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-3 flex-row items-center">
-                            <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${item.bgColor}`}>
-                                {item.status === 'Present' ? <CheckCircle2 size={20} color={item.color} /> :
-                                    item.status === 'Absent' ? <XCircle size={20} color={item.color} /> :
-                                        <Clock size={20} color={item.color} />}
-                            </View>
-                            <View className="flex-1">
-                                <View className="flex-row justify-between mb-1">
-                                    <Text className="font-bold text-gray-900 dark:text-white">{item.subject}</Text>
-                                    <Text className={`text-xs font-bold px-2 py-0.5 rounded-full ${item.bgColor} ${item.textClass}`}>{item.status}</Text>
-                                </View>
-                                <View className="flex-row justify-between">
-                                    <Text className="text-xs text-gray-500 dark:text-gray-400">{item.date}</Text>
-                                    <Text className="text-xs text-gray-500 dark:text-gray-400">{item.time}</Text>
-                                </View>
-                            </View>
+                    {attendanceHistory.length === 0 ? (
+                        <View className="items-center py-10">
+                            <Text className={`text-gray-400 ${isDark ? 'dark:text-gray-500' : ''}`}>No records found.</Text>
                         </View>
-                    ))}
-                </View>
+                    ) : (
+                        attendanceHistory.map((item, index) => {
+                            const statusInfo = getStatusInfo(item.status);
+                            const StatusIcon = statusInfo.icon;
+                            const dateObj = new Date(item.date);
 
+                            return (
+                                <View key={index} className={`flex-row items-center p-4 rounded-2xl mb-3 shadow-sm ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+                                    <View className={`w-12 h-12 rounded-2xl items-center justify-center mr-4 ${isDark ? 'bg-gray-700' : 'bg-blue-50'}`}>
+                                        <Text className={`text-center font-bold text-xs ${isDark ? 'text-gray-300' : 'text-blue-600'}`}>
+                                            {dateObj.getDate()}
+                                        </Text>
+                                        <Text className={`text-[10px] uppercase font-bold ${isDark ? 'text-gray-500' : 'text-blue-400'}`}>
+                                            {dateObj.toLocaleDateString(undefined, { month: 'short' })}
+                                        </Text>
+                                    </View>
+
+                                    <View className="flex-1">
+                                        <Text className={`font-bold text-base mb-0.5 ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.course_name}</Text>
+                                        <Text className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{item.code}</Text>
+                                    </View>
+
+                                    <View className={`px-3 py-1.5 rounded-xl flex-row items-center ${isDark ? statusInfo.darkBg : statusInfo.bg}`}>
+                                        <StatusIcon size={12} color={isDark ? statusInfo.darkColor : statusInfo.color} strokeWidth={3} />
+                                        <Text className={`font-bold text-xs ml-1.5 ${isDark ? statusInfo.darkText : statusInfo.text}`}>
+                                            {item.status}
+                                        </Text>
+                                    </View>
+                                </View>
+                            );
+                        })
+                    )}
+                </View>
             </ScrollView>
         </SafeAreaView>
     );

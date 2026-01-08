@@ -1,157 +1,140 @@
-import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, SlidersHorizontal, Clock, MapPin } from 'lucide-react-native';
+import { Calendar, Clock, MapPin } from 'lucide-react-native';
+import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { useStudentTheme } from '../../components/context/StudentContext';
+import { useAuth } from '../../components/context/AuthContext';
+import { api } from '../../services/api';
 
-const dates = [
-    { day: 'MON', date: '12', active: true },
-    { day: 'TUE', date: '13', active: false },
-    { day: 'WED', date: '14', active: false },
-    { day: 'THU', date: '15', active: false },
-    { day: 'FRI', date: '16', active: false },
-    { day: 'SAT', date: '17', active: false },
-];
-
-const schedule = [
-    {
-        time: '09:00',
-        title: 'Linear Algebra',
-        duration: '09:00 - 10:30 AM',
-        location: 'Room 301',
-        instructor: 'Dr. Sarah Wilson',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&q=80',
-        type: 'LEC',
-        typeColor: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
-    },
-    {
-        time: '11:00',
-        title: 'Computer Science 101',
-        duration: '11:00 - 12:30 PM',
-        location: 'Lab 3B',
-        instructor: 'Prof. John Parker',
-        initials: 'JP',
-        type: 'LAB',
-        typeColor: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
-    },
-    {
-        time: '13:00',
-        type: 'BREAK',
-    },
-    {
-        time: '14:00',
-        title: 'Data Structures',
-        duration: '14:00 - 15:30 PM',
-        location: 'Room 405',
-        instructor: 'Dr. M. Kaling',
-        initials: 'MK',
-        type: 'TUT',
-        typeColor: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
-    },
-    {
-        time: '16:00',
-        empty: true
-    }
-];
+// Fallback ID
+const DEMO_STUDENT_ID = 3;
 
 export default function StudentTimeTable() {
     const { isDark } = useStudentTheme();
+    const { user } = useAuth();
+    const studentId = user?.id || DEMO_STUDENT_ID;
+
+    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [fullTimetable, setFullTimetable] = useState([]);
+    const [refreshing, setRefreshing] = useState(false);
+    const scrollViewRef = useRef<ScrollView>(null);
+
+    const loadTimetable = async () => {
+        try {
+            const data = await api.getStudentTimetable(studentId);
+            setFullTimetable(data);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        loadTimetable().finally(() => setRefreshing(false));
+    }, [studentId]);
+
+    useEffect(() => {
+        loadTimetable();
+    }, [studentId]);
+
+    // Generate week dates (Sun-Sat) or dynamic week logic...
+    // For simplicity, sticking to previous week logic but purely for display.
+    const weekDates = useMemo(() => {
+        const dates = [];
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay()); // Sunday
+
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(startOfWeek);
+            date.setDate(startOfWeek.getDate() + i);
+            dates.push(date);
+        }
+        return dates;
+    }, []);
+
+    // Filter classes for selected day
+    const dayName = selectedDate.toLocaleDateString('en-US', { weekday: 'long' });
+    const todaysClasses = useMemo(() => {
+        return fullTimetable.filter(item => item.day_of_week === dayName);
+    }, [fullTimetable, dayName]);
+
 
     return (
-        <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
-            <View className="px-5 pt-4 pb-2 flex-row justify-between items-center">
-                <Text className="text-2xl font-bold text-gray-900 dark:text-white">Time Table</Text>
-
-                <View className="flex-row items-center space-x-3">
-                    <View className="flex-row items-center bg-gray-100 dark:bg-gray-800 rounded-lg px-2 py-1.5">
-                        <TouchableOpacity className="p-1">
-                            <ChevronLeft size={16} color={isDark ? "#9CA3AF" : "#6B7280"} />
-                        </TouchableOpacity>
-                        <Text className="font-bold text-sm text-gray-900 dark:text-white mx-2">Week 4</Text>
-                        <TouchableOpacity className="p-1">
-                            <ChevronRight size={16} color={isDark ? "#9CA3AF" : "#6B7280"} />
-                        </TouchableOpacity>
-                    </View>
-                    <TouchableOpacity className="bg-white dark:bg-gray-800 p-2 rounded-full shadow-sm">
-                        <SlidersHorizontal size={20} color={isDark ? "#E5E7EB" : "#374151"} />
-                    </TouchableOpacity>
-                </View>
+        <SafeAreaView className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+            <View className={`px-5 py-4 ${isDark ? 'bg-gray-800' : 'bg-white'} border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Timetable</Text>
+                <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{selectedDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
             </View>
 
-            <View className="pb-6">
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="pl-5 pt-4" contentContainerStyle={{ paddingRight: 20 }}>
-                    {dates.map((item, index) => (
-                        <TouchableOpacity
-                            key={index}
-                            className={`mr-3 w-16 h-20 rounded-2xl items-center justify-center border ${item.active ? 'bg-blue-600 border-blue-600 shadow-blue-200 shadow-lg' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}
-                        >
-                            <Text className={`text-xs font-bold mb-1 ${item.active ? 'text-blue-100' : 'text-gray-400 dark:text-gray-500'}`}>{item.day}</Text>
-                            <Text className={`text-xl font-bold ${item.active ? 'text-white' : 'text-gray-900 dark:text-white'}`}>{item.date}</Text>
-                        </TouchableOpacity>
-                    ))}
+            {/* Date Strip */}
+            <View className={`py-4 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-sm mb-1`}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}>
+                    {weekDates.map((date, index) => {
+                        const isSelected = date.toDateString() === selectedDate.toDateString();
+                        const isToday = date.toDateString() === new Date().toDateString();
+
+                        return (
+                            <TouchableOpacity
+                                key={index}
+                                onPress={() => setSelectedDate(date)}
+                                className={`items-center justify-center w-14 h-20 rounded-2xl ${isSelected ? 'bg-blue-600 shadow-lg shadow-blue-200' : (isDark ? 'bg-gray-700' : 'bg-white border border-gray-100')}`}
+                            >
+                                <Text className={`text-xs mb-1 font-medium ${isSelected ? 'text-blue-100' : (isDark ? 'text-gray-400' : 'text-gray-400')}`}>
+                                    {date.toLocaleDateString(undefined, { weekday: 'short' })}
+                                </Text>
+                                <Text className={`text-lg font-bold ${isSelected ? 'text-white' : (isDark ? (isToday ? 'text-blue-400' : 'text-white') : (isToday ? 'text-blue-600' : 'text-gray-900'))}`}>
+                                    {date.getDate()}
+                                </Text>
+                                {isToday && <View className={`w-1 h-1 rounded-full mt-1 ${isSelected ? 'bg-white' : 'bg-blue-600'}`} />}
+                            </TouchableOpacity>
+                        );
+                    })}
                 </ScrollView>
             </View>
 
-            <ScrollView className="flex-1 px-5" showsVerticalScrollIndicator={false}>
-                <View className="flex-row relative pb-10">
-                    {/* Vertical Line */}
-                    <View className="absolute left-[54px] top-4 bottom-0 w-[1px] bg-gray-200 dark:bg-gray-700" />
-
-                    <View className="flex-1">
-                        {schedule.map((item, index) => (
-                            <View key={index} className="flex-row mb-6">
-                                {/* Time Column */}
-                                <View className="w-14 pt-1 mr-4 items-end">
-                                    <Text className="text-gray-400 dark:text-gray-500 font-bold text-xs">{item.time}</Text>
-                                </View>
-
-                                {/* Event Card */}
-                                <View className="flex-1">
-                                    {item.type === 'BREAK' ? (
-                                        <View className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl py-4 items-center justify-center bg-gray-50/50 dark:bg-gray-800/50">
-                                            <Text className="text-gray-400 dark:text-gray-500 font-bold text-xs tracking-widest uppercase">Lunch Break</Text>
-                                        </View>
-                                    ) : item.empty ? (
-                                        <View className="h-10" />
-                                    ) : (
-                                        <View className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                                            <View className="flex-row justify-between items-start mb-3">
-                                                <Text className="text-lg font-bold text-gray-900 dark:text-white flex-1 mr-2">{item.title}</Text>
-                                                <View className={`px-2 py-0.5 rounded ${item.typeColor?.split(' ')[0] || 'bg-gray-100 dark:bg-gray-700'}`}>
-                                                    <Text className={`text-[10px] font-bold ${item.typeColor?.split(' ')[1] || 'text-gray-700 dark:text-gray-300'}`}>{item.type}</Text>
-                                                </View>
-                                            </View>
-
-                                            <View className="flex-row items-center mb-4 space-x-4">
-                                                <View className="flex-row items-center mr-4">
-                                                    <Clock size={14} color="#9CA3AF" />
-                                                    <Text className="text-gray-500 dark:text-gray-400 text-xs font-medium ml-1.5">{item.duration}</Text>
-                                                </View>
-                                                <View className="flex-row items-center">
-                                                    <MapPin size={14} color="#9CA3AF" />
-                                                    <Text className="text-gray-500 dark:text-gray-400 text-xs font-medium ml-1.5">{item.location}</Text>
-                                                </View>
-                                            </View>
-
-                                            <View className="flex-row items-center">
-                                                {item.avatar ? (
-                                                    <Image
-                                                        source={{ uri: item.avatar }}
-                                                        className="w-6 h-6 rounded-full mr-2"
-                                                    />
-                                                ) : (
-                                                    <View className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 items-center justify-center mr-2">
-                                                        <Text className="text-[10px] font-bold text-gray-600 dark:text-gray-300">{item.initials}</Text>
-                                                    </View>
-                                                )}
-                                                <Text className="text-gray-600 dark:text-gray-400 text-xs font-medium">{item.instructor}</Text>
-                                            </View>
-                                        </View>
-                                    )}
-                                </View>
-                            </View>
-                        ))}
+            <ScrollView
+                ref={scrollViewRef}
+                className="flex-1 px-5 pt-4"
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            >
+                {todaysClasses.length === 0 ? (
+                    <View className="items-center justify-center py-20">
+                        <Text className={`text-gray-400 ${isDark ? 'dark:text-gray-500' : ''}`}>No classes scheduled for {dayName}</Text>
                     </View>
-                </View>
+                ) : (
+                    <View className="pb-10 space-y-4">
+                        {todaysClasses.map((item, index) => {
+                            // Dynamic Color generation/selection can remain if needed, or simplified
+                            const cardColors = index % 2 === 0
+                                ? { bg: isDark ? 'bg-blue-900/20' : 'bg-blue-50', border: isDark ? 'border-blue-900/50' : 'border-blue-100', text: isDark ? 'text-blue-400' : 'text-blue-700', icon: isDark ? '#60A5FA' : '#2563EB' }
+                                : { bg: isDark ? 'bg-purple-900/20' : 'bg-purple-50', border: isDark ? 'border-purple-900/50' : 'border-purple-100', text: isDark ? 'text-purple-400' : 'text-purple-700', icon: isDark ? '#A78BFA' : '#7C3AED' };
+
+                            return (
+                                <View key={index} className="flex-row">
+                                    <View className="w-16 items-center pt-2 mr-3">
+                                        <Text className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.start_time.substring(0, 5)}</Text>
+                                        <View className={`w-0.5 flex-1 my-2 ${isDark ? 'bg-gray-800' : 'bg-gray-200'}`} />
+                                    </View>
+
+                                    <View className={`flex-1 p-5 rounded-2xl border ${cardColors.bg} ${cardColors.border}`}>
+                                        <View className="flex-row justify-between mb-2">
+                                            <Text className={`text-xs font-bold uppercase tracking-wider ${cardColors.text}`}>{item.code}</Text>
+                                            <Clock size={14} color={cardColors.icon} />
+                                        </View>
+                                        <Text className={`text-lg font-bold mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.course_name}</Text>
+                                        <Text className={`text-xs mb-3 font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>by {item.instructor_name || 'Staff'}</Text>
+
+                                        <View className="flex-row items-center">
+                                            <MapPin size={14} color={isDark ? '#9CA3AF' : '#6B7280'} />
+                                            <Text className={`text-xs ml-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{item.location}</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            );
+                        })}
+                    </View>
+                )}
             </ScrollView>
         </SafeAreaView>
     );

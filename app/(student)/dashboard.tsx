@@ -1,139 +1,162 @@
-import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, ScrollView, Image, TouchableOpacity, RefreshControl, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bell, Clock, MapPin, Check, X, PieChart } from 'lucide-react-native';
+import { Bell, Calendar, TrendingUp, Clock, MapPin, ChevronRight, AlertCircle, FileText, Activity } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { useState, useCallback, useEffect } from 'react';
 import { useStudentTheme } from '../../components/context/StudentContext';
+import { useAuth } from '../../components/context/AuthContext';
+import { api } from '../../services/api';
+
+const { width } = Dimensions.get('window');
+
+// Fallback ID for dev if context is lost on reload (Alex Johnson)
+const DEMO_STUDENT_ID = 3;
 
 export default function StudentDashboard() {
+    const router = useRouter();
     const { isDark } = useStudentTheme();
+    const { user } = useAuth();
+
+    // Safety check - use signed-in ID or fallback
+    const studentId = user?.id || DEMO_STUDENT_ID;
+
+    const [refreshing, setRefreshing] = useState(false);
+    const [stats, setStats] = useState({ present_count: 0, absent_count: 0, late_count: 0, total_classes: 0, percentage: 0 });
+    const [upcoming, setUpcoming] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        loadData().finally(() => setRefreshing(false));
+    }, [studentId]);
+
+    const loadData = async () => {
+        try {
+            const [statsData, upcomingData] = await Promise.all([
+                api.getStudentStats(studentId),
+                api.getStudentUpcoming(studentId)
+            ]);
+            setStats(statsData);
+            setUpcoming(upcomingData);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadData();
+    }, [studentId]);
 
     return (
-        <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
-            <ScrollView className="px-5 pt-4" showsVerticalScrollIndicator={false}>
+        <SafeAreaView className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+            <ScrollView
+                className="flex-1"
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            >
                 {/* Header */}
-                <View className="flex-row justify-between items-center mb-6">
-                    <View className="flex-row items-center">
-                        <Image
-                            source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&q=80' }} // Alex Johnson avatar
-                            className="w-12 h-12 rounded-full mr-3 border-2 border-white dark:border-gray-700"
-                        />
+                <View className={`px-5 py-4 flex-row justify-between items-center ${isDark ? 'bg-gray-800' : 'bg-white'} mb-2`}>
+                    <View className="flex-row items-center space-x-3">
+                        <View className="relative">
+                            <Image
+                                source={{ uri: user?.profile_image || 'https://avatar.iran.liara.run/public/34' }}
+                                className="w-12 h-12 rounded-full border-2 border-blue-500"
+                            />
+                            <View className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
+                        </View>
                         <View>
-                            <Text className="text-gray-500 dark:text-gray-400 text-xs font-medium">Good Morning,</Text>
-                            <Text className="text-xl font-bold text-gray-900 dark:text-white">Alex Johnson</Text>
+                            <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Welcome back,</Text>
+                            <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{user?.name || 'Student'}</Text>
                         </View>
                     </View>
-                    <TouchableOpacity className="bg-white dark:bg-gray-800 p-2.5 rounded-full shadow-sm">
-                        <Bell size={22} color={isDark ? "#E5E7EB" : "#1F2937"} />
-                        <View className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-gray-800" />
+                    <TouchableOpacity className={`p-2 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                        <Bell size={24} color={isDark ? '#E5E7EB' : '#374151'} />
+                        <View className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />
                     </TouchableOpacity>
                 </View>
 
                 {/* Overall Attendance Card */}
-                <View className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-sm mb-6">
-                    <View className="flex-row justify-between items-start mb-2">
-                        <View>
-                            <Text className="text-gray-500 dark:text-gray-400 font-medium mb-1">Overall Attendance</Text>
-                            <View className="flex-row items-center">
-                                <Text className="text-5xl font-bold text-blue-600 dark:text-blue-400 mr-3">85%</Text>
-                                <View className="bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded-md">
-                                    <Text className="text-green-700 dark:text-green-400 font-bold text-xs">↗ 2%</Text>
-                                </View>
+                <View className="px-5 mb-6">
+                    <View className="bg-blue-600 rounded-3xl p-6 shadow-lg shadow-blue-200">
+                        <View className="flex-row justify-between items-start mb-4">
+                            <View>
+                                <Text className="text-blue-100 font-medium mb-1">Overall Attendance</Text>
+                                <Text className="text-4xl font-bold text-white">{stats.percentage}%</Text>
+                            </View>
+                            <View className="bg-white/20 p-2 rounded-lg">
+                                <TrendingUp size={24} color="white" />
                             </View>
                         </View>
-                        <View className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/20 items-center justify-center">
-                            <PieChart size={24} color={isDark ? "#60A5FA" : "#2563EB"} />
+                        <View className="flex-row space-x-4">
+                            <View className="bg-white/10 px-3 py-2 rounded-xl flex-1">
+                                <Text className="text-blue-50 text-xs mb-1">Present</Text>
+                                <Text className="text-white font-bold text-lg">{stats.present_count}</Text>
+                            </View>
+                            <View className="bg-white/10 px-3 py-2 rounded-xl flex-1">
+                                <Text className="text-blue-50 text-xs mb-1">Absent</Text>
+                                <Text className="text-white font-bold text-lg">{stats.absent_count}</Text>
+                            </View>
+                            <View className="bg-white/10 px-3 py-2 rounded-xl flex-1">
+                                <Text className="text-blue-50 text-xs mb-1">Total</Text>
+                                <Text className="text-white font-bold text-lg">{stats.total_classes}</Text>
+                            </View>
                         </View>
                     </View>
-
-                    <View className="flex-row justify-between items-center mb-2">
-                        <Text className="text-gray-500 dark:text-gray-400 text-xs font-bold">Attendance Goal</Text>
-                        <Text className="text-gray-900 dark:text-white text-xs font-bold">Target: 75%</Text>
-                    </View>
-                    <View className="h-2.5 bg-gray-100 dark:bg-gray-700 rounded-full mb-3 overflow-hidden">
-                        <View className="h-full bg-blue-600 dark:bg-blue-500 rounded-full" style={{ width: '85%' }} />
-                    </View>
-                    <Text className="text-gray-400 dark:text-gray-500 text-xs">You are doing great! Keep it up to maintain your eligibility.</Text>
                 </View>
 
-                {/* Up Next */}
-                <View className="flex-row justify-between items-center mb-4">
-                    <Text className="text-xl font-bold text-gray-900 dark:text-white">Up Next</Text>
-                    <TouchableOpacity>
-                        <Text className="text-blue-600 dark:text-blue-400 font-bold text-sm">View Full Schedule</Text>
-                    </TouchableOpacity>
-                </View>
-
-                <View className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm mb-8 flex-row justify-between overflow-hidden">
-                    <View className="flex-1 pr-4">
-                        <View className="bg-blue-50 dark:bg-blue-900/30 self-start px-2 py-1 rounded text-xs mb-3">
-                            <Text className="text-blue-600 dark:text-blue-400 font-bold text-[10px] uppercase tracking-wide">ONGOING</Text>
-                        </View>
-                        <Text className="text-lg font-bold text-gray-900 dark:text-white mb-3 leading-tight">Computer Science 101</Text>
-                        <View className="mb-4 space-y-2">
-                            <View className="flex-row items-center">
-                                <Clock size={14} color="#9CA3AF" />
-                                <Text className="text-gray-500 dark:text-gray-400 text-xs font-medium ml-2">10:00 AM - 11:30 AM</Text>
-                            </View>
-                            <View className="flex-row items-center">
-                                <MapPin size={14} color="#9CA3AF" />
-                                <Text className="text-gray-500 dark:text-gray-400 text-xs font-medium ml-2">Room 3B</Text>
-                            </View>
-                        </View>
-                        <TouchableOpacity className="bg-blue-600 dark:bg-blue-500 py-3 rounded-xl items-center shadow-blue-200 dark:shadow-none shadow-md">
-                            <Text className="text-white font-bold">Check In</Text>
+                {/* Up Next Section */}
+                <View className="px-5 mb-6">
+                    <View className="flex-row justify-between items-center mb-4">
+                        <Text className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Up Next</Text>
+                        <TouchableOpacity
+                            onPress={() => router.push('/(student)/timetable')}
+                            className="flex-row items-center"
+                        >
+                            <Text className="text-blue-600 font-medium mr-1">See all</Text>
+                            <ChevronRight size={16} color="#2563EB" />
                         </TouchableOpacity>
                     </View>
-                    <Image
-                        source={{ uri: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=200&q=80' }} // Coding image
-                        className="w-24 rounded-xl h-full bg-gray-200 dark:bg-gray-700"
-                        resizeMode="cover"
-                    />
-                </View>
 
-                {/* Recent Activity */}
-                <Text className="text-xl font-bold text-gray-900 dark:text-white mb-4">Recent Activity</Text>
-
-                <View className="mb-8 space-y-4">
-                    {/* Item 1 */}
-                    <View className="flex-row items-center bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm">
-                        <View className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full items-center justify-center mr-4">
-                            <Check size={18} color={isDark ? "#4ADE80" : "#16A34A"} strokeWidth={3} />
+                    {upcoming.length === 0 ? (
+                        <View className={`p-6 rounded-2xl items-center ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+                            <Text className={`text-gray-400 ${isDark ? 'dark:text-gray-500' : ''}`}>No more classes today</Text>
                         </View>
-                        <View className="flex-1">
-                            <Text className="font-bold text-gray-900 dark:text-white text-base">Linear Algebra</Text>
-                            <Text className="text-gray-500 dark:text-gray-400 text-xs">Today, 09:00 AM</Text>
+                    ) : (
+                        <View>
+                            {upcoming.map((cls, index) => (
+                                <View key={index} className={`p-4 rounded-2xl border mb-3 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
+                                    <View className="flex-row justify-between items-start mb-3">
+                                        <View className="bg-orange-100 px-3 py-1 rounded-lg self-start">
+                                            <Text className="text-orange-700 font-bold text-xs">{cls.code}</Text>
+                                        </View>
+                                        <View className="flex-row items-center">
+                                            <Clock size={14} color={isDark ? '#9CA3AF' : '#6B7280'} />
+                                            <Text className={`text-xs ml-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                {cls.start_time.substring(0, 5)} - {cls.end_time.substring(0, 5)}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <Text className={`text-lg font-bold mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                        {cls.course_name}
+                                    </Text>
+                                    <View className="flex-row items-center justify-between mt-2">
+                                        <View className="flex-row items-center">
+                                            <MapPin size={14} color={isDark ? '#9CA3AF' : '#6B7280'} />
+                                            <Text className={`text-xs ml-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{cls.location}</Text>
+                                        </View>
+                                        <View className="flex-row items-center">
+                                            {cls.instructor_image ? (
+                                                <Image source={{ uri: cls.instructor_image }} className="w-5 h-5 rounded-full mr-2" />
+                                            ) : <View className="w-5 h-5 rounded-full bg-gray-300 mr-2" />}
+                                            <Text className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{cls.instructor_name}</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            ))}
                         </View>
-                        <View className="bg-green-50 dark:bg-green-900/20 px-3 py-1 rounded-full">
-                            <Text className="text-green-700 dark:text-green-400 font-bold text-xs">Present</Text>
-                        </View>
-                    </View>
-
-                    {/* Item 2 */}
-                    <View className="flex-row items-center bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm">
-                        <View className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full items-center justify-center mr-4">
-                            <X size={18} color={isDark ? "#EF4444" : "#DC2626"} strokeWidth={3} />
-                        </View>
-                        <View className="flex-1">
-                            <Text className="font-bold text-gray-900 dark:text-white text-base">History of Art</Text>
-                            <Text className="text-gray-500 dark:text-gray-400 text-xs">Yesterday, 02:00 PM</Text>
-                        </View>
-                        <View className="bg-red-50 dark:bg-red-900/20 px-3 py-1 rounded-full">
-                            <Text className="text-red-700 dark:text-red-400 font-bold text-xs">Absent</Text>
-                        </View>
-                    </View>
-
-                    {/* Item 3 */}
-                    <View className="flex-row items-center bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm">
-                        <View className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full items-center justify-center mr-4">
-                            <Check size={18} color={isDark ? "#4ADE80" : "#16A34A"} strokeWidth={3} />
-                        </View>
-                        <View className="flex-1">
-                            <Text className="font-bold text-gray-900 dark:text-white text-base">Physics Lab</Text>
-                            <Text className="text-gray-500 dark:text-gray-400 text-xs">Mon, 11:00 AM</Text>
-                        </View>
-                        <View className="bg-green-50 dark:bg-green-900/20 px-3 py-1 rounded-full">
-                            <Text className="text-green-700 dark:text-green-400 font-bold text-xs">Present</Text>
-                        </View>
-                    </View>
+                    )}
                 </View>
             </ScrollView>
         </SafeAreaView>

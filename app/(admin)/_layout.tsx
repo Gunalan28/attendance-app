@@ -1,5 +1,5 @@
-import { Tabs } from 'expo-router';
-import { Home, Users, Building, FileBarChart, Settings } from 'lucide-react-native';
+import { Tabs, router } from 'expo-router';
+import { Home, Users, UserCheck, FileBarChart, Settings } from 'lucide-react-native';
 import { useColorScheme } from 'nativewind';
 
 export default function AdminLayout() {
@@ -38,37 +38,55 @@ export default function AdminLayout() {
                 }}
             />
             <Tabs.Screen
-                name="departments"
-                options={{
-                    title: 'Departments',
-                    tabBarIcon: ({ color, size }) => <Building color={color} size={24} strokeWidth={2.5} />
-                }}
-            />
-            <Tabs.Screen
                 name="students/index"
+                listeners={{
+                    tabPress: (e) => {
+                        // Prevent default action (restoring history)
+                        e.preventDefault();
+                        // Navigate freshly to the tab route with cleared params
+                        router.navigate({ pathname: '/(admin)/students', params: { status: '', year: '', refresh: Date.now().toString() } });
+                    },
+                }}
                 options={{
                     title: 'Students',
-                    tabBarIcon: ({ color, size }) => <Users color={color} size={24} strokeWidth={2.5} />
+                    unmountOnBlur: true,
+                    tabBarIcon: ({ color, size }: { color: string, size: number }) => <Users color={color} size={size} strokeWidth={2.5} />
+                } as any}
+            />
+            <Tabs.Screen
+                name="faculty/index"
+                listeners={{
+                    tabPress: (e) => {
+                        e.preventDefault();
+                        router.navigate({ pathname: '/(admin)/faculty', params: { status: '', refresh: Date.now().toString() } });
+                    },
                 }}
+                options={{
+                    title: 'Faculty',
+                    unmountOnBlur: true,
+                    tabBarIcon: ({ color, size }: { color: string, size: number }) => <UserCheck color={color} size={size} strokeWidth={2.5} />
+                } as any}
             />
             <Tabs.Screen
                 name="reports"
                 options={{
                     title: 'Reports',
-                    tabBarIcon: ({ color, size }) => <FileBarChart color={color} size={24} strokeWidth={2.5} />
+                    tabBarIcon: ({ color, size }: { color: string, size: number }) => <FileBarChart color={color} size={size} strokeWidth={2.5} />
                 }}
             />
             <Tabs.Screen
                 name="settings"
                 options={{
                     title: 'Settings',
-                    tabBarIcon: ({ color, size }) => <Settings color={color} size={24} strokeWidth={2.5} />
+                    tabBarIcon: ({ color, size }: { color: string, size: number }) => <Settings color={color} size={size} strokeWidth={2.5} />
                 }}
             />
             {/* Hidden Screens */}
-            <Tabs.Screen name="students/add" options={{ href: null }} />
+            <Tabs.Screen name="students/add" options={{ href: null, title: 'Add Student' }} />
             <Tabs.Screen name="students/[id]" options={{ href: null }} />
-            <Tabs.Screen name="faculty/index" options={{ href: null }} />
+            <Tabs.Screen name="faculty/add" options={{ href: null, title: 'Add Faculty' }} />
+            <Tabs.Screen name="faculty/attendance" options={{ href: null, title: 'Mark Attendance' }} />
+            <Tabs.Screen name="departments" options={{ href: null }} />
         </Tabs>
     );
 }

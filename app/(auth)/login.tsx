@@ -1,8 +1,10 @@
-import { View, Text, ScrollView, Image, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, Image, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Mail, Lock, Shield, Eye, EyeOff, Briefcase, ArrowRight, GraduationCap, School } from 'lucide-react-native';
 import { EducationLoader } from '../../components/common/EducationLoader';
+import { useAuth } from '../../components/context/AuthContext';
+import { api } from '../../services/api';
 
 import Input from '../../components/common/Input';
 import images from '../../constants/images';
@@ -15,36 +17,85 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    const handleLogin = () => {
+    const { login: setGlobalUser } = useAuth();
+
+    // Auto-fill credentials when role changes (UX improvement)
+    useEffect(() => {
+        switch (role) {
+            case 'student':
+                setIdentifier('student@college.edu');
+                setPassword('123456');
+                break;
+            case 'faculty':
+                setIdentifier('sarah.wilson@college.edu');
+                setPassword('123456');
+                break;
+            case 'admin':
+                setIdentifier('admin@college.edu');
+                setPassword('123456');
+                break;
+        }
+    }, [role]);
+
+    const handleLogin = async () => {
+        if (!identifier.trim() || !password.trim()) {
+            Alert.alert('Credentials Required', 'Please enter your email and password to sign in.');
+            return;
+        }
         setLoading(true);
-        // Simulate login delay with custom loader
-        setTimeout(() => {
+
+        try {
+            // BYPASS AUTHENTICATION AS REQUESTED
+            // Automatically log in as a demo user for the selected role
+            let demoId;
+            switch (role) {
+                case 'student': demoId = 3; break; // Alex Johnson
+                case 'faculty': demoId = 2; break; // Sarah Wilson
+                case 'admin': demoId = 1; break;   // Admin
+            }
+
+            // Fetch user details simply to populate the context with correct name/image
+            // We skip password verification entirely.
+            const userDetails = await api.getUser(demoId);
+
+            if (userDetails) {
+                setGlobalUser({ ...userDetails, role }); // Ensure role matches selected tab
+
+                setTimeout(() => {
+                    setLoading(false);
+                    if (role === 'admin') router.replace('/(admin)/dashboard');
+                    else if (role === 'faculty') router.replace('/(faculty)/dashboard');
+                    else router.replace('/(student)/dashboard');
+                }, 1000); // Shorter delay for snappier feel
+            } else {
+                throw new Error('Demo user not found');
+            }
+        } catch (error: any) {
+            console.error(error);
             setLoading(false);
-            if (role === 'admin') router.replace('/(admin)/dashboard');
-            else if (role === 'faculty') router.replace('/(faculty)/dashboard');
-            else router.replace('/(student)/dashboard');
-        }, 2200); // Extended delay to show animation
+            alert(error.message || 'Login Error. Ensure Backend is running.');
+        }
     };
 
     const roleConfig = useMemo(() => {
         switch (role) {
             case 'student':
                 return {
-                    label: 'Register Number',
-                    placeholder: 'e.g., 2023CS101',
-                    icon: <GraduationCap size={20} color="#6B7280" />
+                    label: 'Email Address',
+                    placeholder: 'e.g., student@example.com',
+                    icon: <Mail size={20} color="#6B7280" />
                 };
             case 'faculty':
                 return {
-                    label: 'Faculty ID',
-                    placeholder: 'e.g., FAC8821',
-                    icon: <Briefcase size={20} color="#6B7280" />
+                    label: 'Email Address',
+                    placeholder: 'e.g., faculty@example.com',
+                    icon: <Mail size={20} color="#6B7280" />
                 };
             case 'admin':
                 return {
-                    label: 'Admin ID',
-                    placeholder: 'e.g., ADM001',
-                    icon: <Shield size={20} color="#6B7280" />
+                    label: 'Email Address',
+                    placeholder: 'e.g., admin@example.com',
+                    icon: <Mail size={20} color="#6B7280" />
                 };
         }
     }, [role]);
@@ -68,7 +119,7 @@ export default function Login() {
                             <School size={16} color="#ffffff" />
                             <Text className="text-white font-bold text-xs tracking-wider">UNIVERSITY PORTAL</Text>
                         </View>
-                        <Text className="text-white text-4xl font-extrabold shadow-sm">University College of Engineering Nagercoil</Text>
+                        <Text className="text-white text-4xl font-extrabold shadow-sm">College Name</Text>
                     </View>
                 </View>
 
@@ -109,17 +160,15 @@ export default function Login() {
                             onChangeText={setIdentifier}
                             leftIcon={roleConfig.icon}
                             forceLightMode
+                        // Cosmetic only
                         />
 
                         <View>
                             <View className="flex-row justify-between items-center mb-1">
                                 <Text className="text-gray-700 font-bold text-xs uppercase ml-1 tracking-wider">Password</Text>
-                                <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')}>
-                                    <Text className="text-blue-600 font-bold text-xs">Forgot Password?</Text>
-                                </TouchableOpacity>
                             </View>
                             <Input
-                                placeholder="Enter your password"
+                                placeholder="Any password works"
                                 value={password}
                                 onChangeText={setPassword}
                                 secureTextEntry={!showPassword}
@@ -155,7 +204,7 @@ export default function Login() {
                     </View>
 
                     <View className="items-center mt-auto mb-6">
-                        <Text className="text-gray-400 text-xs text-center">© 2024 College Attendance System</Text>
+                        <Text className="text-gray-400 text-xs text-center">© 2026 College Attendance System</Text>
                     </View>
                 </View>
             </ScrollView>

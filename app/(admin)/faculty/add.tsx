@@ -7,7 +7,7 @@ import { api } from '../../../services/api';
 import { ChevronLeft } from 'lucide-react-native';
 import AnimatedAlert, { AnimatedAlertProps } from '../../../components/common/AnimatedAlert';
 
-export default function AddStudent() {
+export default function AddFaculty() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [alertConfig, setAlertConfig] = useState<AnimatedAlertProps>({
@@ -21,8 +21,7 @@ export default function AddStudent() {
         name: '',
         email: '',
         password: '',
-        department: 'Information Technology', // Default
-        year: ''
+        department: 'Information Technology'
     });
 
     useFocusEffect(
@@ -31,8 +30,7 @@ export default function AddStudent() {
                 name: '',
                 email: '',
                 password: '',
-                department: 'Information Technology',
-                year: ''
+                department: 'Information Technology'
             });
             setAlertConfig(prev => ({ ...prev, visible: false }));
             setLoading(false);
@@ -40,7 +38,7 @@ export default function AddStudent() {
     );
 
     const handleSubmit = async () => {
-        if (!form.name || !form.email || !form.password || !form.year) {
+        if (!form.name || !form.email || !form.password || !form.department) {
             setAlertConfig({
                 visible: true,
                 title: 'Missing Fields',
@@ -53,22 +51,22 @@ export default function AddStudent() {
 
         setLoading(true);
         try {
-            await api.addStudent(form);
+            await api.addFaculty(form);
             setAlertConfig({
                 visible: true,
                 title: 'Success!',
-                message: 'Student added successfully',
+                message: 'Faculty added successfully',
                 type: 'success',
                 onClose: () => {
                     setAlertConfig(prev => ({ ...prev, visible: false }));
-                    router.navigate('/(admin)/students');
+                    router.navigate('/(admin)/faculty');
                 }
             });
         } catch (error: any) {
             setAlertConfig({
                 visible: true,
                 title: 'Error',
-                message: error.message || 'Failed to add student',
+                message: error.message || 'Failed to add faculty',
                 type: 'error',
                 onClose: () => setAlertConfig(prev => ({ ...prev, visible: false }))
             });
@@ -80,10 +78,10 @@ export default function AddStudent() {
     return (
         <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
             <View className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex-row items-center">
-                <TouchableOpacity onPress={() => router.navigate('/(admin)/students')} className="mr-4">
+                <TouchableOpacity onPress={() => router.navigate('/(admin)/faculty')} className="mr-4">
                     <ChevronLeft size={24} color="#374151" />
                 </TouchableOpacity>
-                <Text className="text-xl font-bold text-gray-900 dark:text-white">Add New Student</Text>
+                <Text className="text-xl font-bold text-gray-900 dark:text-white">Add New Faculty</Text>
             </View>
 
             <ScrollView className="flex-1 p-5">
@@ -92,7 +90,7 @@ export default function AddStudent() {
                         <Text className="text-gray-700 dark:text-gray-300 font-medium">Full Name</Text>
                         <Input
                             className='mb-6'
-                            placeholder="John Doe"
+                            placeholder="Dr. Jane Doe"
                             value={form.name}
                             onChangeText={(text) => setForm({ ...form, name: text })}
                         />
@@ -102,7 +100,7 @@ export default function AddStudent() {
                         <Text className="text-gray-700 dark:text-gray-300 font-medium">Email Address</Text>
                         <Input
                             className='mb-6'
-                            placeholder="john@college.edu"
+                            placeholder="jane@college.edu"
                             value={form.email}
                             onChangeText={(text) => setForm({ ...form, email: text })}
                             autoCapitalize="none"
@@ -123,7 +121,7 @@ export default function AddStudent() {
 
                     <View>
                         <Text className="text-gray-700 dark:text-gray-300 font-medium">Department</Text>
-                        <Input 
+                        <Input
                             className='mb-6'
                             placeholder="Information Technology"
                             value={form.department}
@@ -131,26 +129,15 @@ export default function AddStudent() {
                         />
                     </View>
 
-                    <View>
-                        <Text className="text-gray-700 dark:text-gray-300 font-medium">Year of Studying (1-4)</Text>
-                        <Input
-                            className='mb-6'
-                            placeholder="1"
-                            value={form.year}
-                            onChangeText={(text) => setForm({ ...form, year: text })}
-                            keyboardType="numeric"
-                        />
-                    </View>
-
                     <TouchableOpacity
                         onPress={handleSubmit}
                         disabled={loading || alertConfig.visible}
-                        className={`mt-6 p-4 rounded-xl items-center ${loading || alertConfig.visible ? 'bg-gray-400' : 'bg-blue-600'}`}
+                        className={`mt-6 p-4 rounded-xl items-center ${loading || alertConfig.visible ? 'bg-gray-400' : 'bg-purple-600'}`}
                     >
                         {loading ? (
                             <ActivityIndicator color="white" />
                         ) : (
-                            <Text className="text-white font-bold text-lg">Add Student</Text>
+                            <Text className="text-white font-bold text-lg">Add Faculty</Text>
                         )}
                     </TouchableOpacity>
                 </View>

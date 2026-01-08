@@ -1,181 +1,301 @@
-import { View, Text, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, Platform, Dimensions, RefreshControl, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Bell, Users, Building, Plus, FileText, ArrowUpRight, GraduationCap, ClipboardCheck } from 'lucide-react-native';
-import Card from '../../components/common/Card';
-import { useRouter } from 'expo-router';
-import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useColorScheme } from 'nativewind';
+import { Users, BookOpen, UserCheck, TrendingUp, Bell, Calendar, ChevronRight, MoreVertical, Filter } from 'lucide-react-native';
+import { useState, useCallback, useEffect } from 'react';
+import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
+
+import { useAuth } from '../../components/context/AuthContext';
+import { api } from '../../services/api';
+import AnimatedAlert from '../../components/common/AnimatedAlert';
+import SortModal from '../../components/common/SortModal';
+import { EducationLoader } from '../../components/common/EducationLoader';
 
 const { width } = Dimensions.get('window');
 
+// Interface for stats to handle type safety
+interface Stats {
+    students: { total: number; present: number; absent: number };
+    faculty: { total: number; present: number; absent: number };
+    courses: number;
+    department: string;
+
+}
+
 export default function AdminDashboard() {
     const router = useRouter();
+    const { user } = useAuth();
+
+    useEffect(() => {
+        if (!user) {
+            router.replace('/(auth)/login');
+        }
+    }, [user]);
+
     const { colorScheme } = useColorScheme();
     const isDark = colorScheme === 'dark';
 
+    // Filter State
+    const [yearFilter, setYearFilter] = useState<number | null>(null);
+    const [filterModalVisible, setFilterModalVisible] = useState(false);
+
+    // Default stats state
+    const [stats, setStats] = useState<Stats>({
+        students: { total: 0, present: 0, absent: 0 },
+        faculty: { total: 0, present: 0, absent: 0 },
+        courses: 0,
+        department: '',
+
+    });
+    const [refreshing, setRefreshing] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    // Alert State
+    const [alertConfig, setAlertConfig] = useState<{ visible: boolean; title: string; message: string; type?: 'warning' | 'success' | 'error' }>({
+        visible: false,
+        title: '',
+        message: '',
+        type: 'warning'
+    });
+
+    const loadStats = async (year: number | null = yearFilter) => {
+        try {
+            const data = await api.getAdminStats(year);
+            setStats(data);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        loadStats().finally(() => setRefreshing(false));
+    }, [yearFilter]);
+
+    useFocusEffect(
+        useCallback(() => {
+            loadStats(yearFilter);
+        }, [yearFilter])
+    );
+
+    const showAlert = (title: string, message: string) => {
+        setAlertConfig({ visible: true, title, message });
+    };
+
+    const getOrdinal = (n: number) => {
+        const s = ["th", "st", "nd", "rd"];
+        const v = n % 100;
+        return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    };
+
+    const handleStudentStatPress = (type: 'total' | 'present' | 'absent') => {
+        if (type === 'total') {
+            router.push({ pathname: '/(admin)/students', params: { status: '', year: yearFilter || '' } });
+            return;
+        }
+
+        const count = type === 'present' ? stats.students.present : stats.students.absent;
+        if (count === 0) {
+            showAlert(
+                `No Students ${type === 'present' ? 'Present' : 'Absent'}`,
+                `There are currently zero students marked as ${type === 'present' ? 'present' : 'absent'} ${yearFilter ? `in ${getOrdinal(yearFilter)} Year` : 'today'}.`
+            );
+        } else {
+            router.push({
+                pathname: '/(admin)/students',
+                params: {
+                    status: type === 'present' ? 'Present' : 'Absent',
+                    year: yearFilter || ''
+                }
+            });
+        }
+    };
+
+    const handleFacultyStatPress = (type: 'total' | 'present' | 'absent') => {
+        if (type === 'total') {
+            router.push({ pathname: '/(admin)/faculty', params: { status: '', year: '' } });
+            return;
+        }
+
+        const count = type === 'present' ? stats.faculty.present : stats.faculty.absent;
+        if (count === 0) {
+            showAlert(
+                `No Faculty ${type === 'present' ? 'Present' : 'Absent'}`,
+                `There are currently zero faculty members marked as ${type === 'present' ? 'present' : 'absent'} today.`
+            );
+        } else {
+            router.push({ pathname: '/(admin)/faculty', params: { status: type === 'present' ? 'Present' : 'Absent' } });
+        }
+    };
+
+
+
+    if (loading) {
+        return (
+            <SafeAreaView className="flex-1 bg-white dark:bg-gray-900 justify-center items-center">
+                <View className="items-center gap-4">
+                    <ActivityIndicator size="large" color="#3B82F6" />
+                    <Text className="text-gray-500 font-medium">Loading Dashboard...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
     return (
-        <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
-            <ScrollView className="px-5" showsVerticalScrollIndicator={false}>
-                {/* Header */}
-                <View className="flex-row justify-between items-center py-4 mb-2">
+        <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-900">
+            {/* Header */}
+            <View className="px-5 py-4 flex-row justify-between items-center bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
+                <View className="flex-row items-center">
+                    <Image
+                        source={{ uri: user?.profile_image || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&q=80' }}
+                        className="w-10 h-10 rounded-full border-2 border-gray-100 dark:border-gray-600 mr-3"
+                    />
                     <View>
-                        <Text className="text-blue-600 dark:text-blue-400 font-bold text-[10px] tracking-widest uppercase mb-1">ADMIN PORTAL</Text>
-                        <Text className="text-3xl font-extrabold text-gray-900 dark:text-white">Dashboard</Text>
+                        <Text className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Head of Department</Text>
+                        <Text className="text-lg font-bold text-gray-900 dark:text-white">{user?.name || 'Admin User'}</Text>
+                        {stats.department ? (
+                            <Text className="text-xs font-medium text-blue-600 dark:text-blue-400">{stats.department}</Text>
+                        ) : null}
                     </View>
-                    <TouchableOpacity className="relative p-2">
-                        <Bell size={24} color={isDark ? "#D1D5DB" : "#6B7280"} />
-                        <View className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-gray-900" />
-                    </TouchableOpacity>
                 </View>
 
-                {/* Main Stats Card */}
-                <TouchableOpacity
-                    className="mb-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm rounded-[24px] overflow-hidden p-5"
-                    onPress={() => router.push('/(admin)/students')}
-                >
-                    <View className="absolute right-[-20] top-[-20] w-32 h-32 bg-blue-50 dark:bg-blue-900/20 rounded-full opacity-50" />
-                    <View className="flex-row justify-between items-start mb-6">
-                        <View className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-2xl items-center justify-center">
-                            <GraduationCap size={24} color="#2563EB" />
-                        </View>
-                        <View className="bg-green-50 dark:bg-green-900/20 px-2.5 py-1 rounded-full flex-row items-center border border-green-100 dark:border-green-800">
-                            <ArrowUpRight size={14} color="#16A34A" />
-                            <Text className="text-green-700 dark:text-green-400 font-bold text-xs ml-1">12%</Text>
-                        </View>
-                    </View>
-                    <Text className="text-gray-500 dark:text-gray-400 font-medium text-sm mb-1">Total Students</Text>
-                    <Text className="text-4xl font-extrabold text-gray-900 dark:text-white">1,250</Text>
-                </TouchableOpacity>
+            </View>
 
-                {/* Secondary Grid */}
-                <View className="flex-row gap-4 mb-4">
-                    <Card className="flex-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm rounded-[24px] p-5 relative overflow-hidden">
-                        <View className="absolute right-[-10] top-[-10] w-20 h-20 bg-purple-50 dark:bg-purple-900/20 rounded-full opacity-50" />
-                        <View className="w-10 h-10 bg-purple-50 dark:bg-purple-900/30 rounded-xl items-center justify-center mb-4">
-                            <Users size={20} color="#9333EA" />
-                        </View>
-                        <Text className="text-gray-500 dark:text-gray-400 font-medium text-xs mb-1">Staffs</Text>
-                        <Text className="text-2xl font-bold text-gray-900 dark:text-white">85</Text>
-                    </Card>
-                    <TouchableOpacity
-                        className="flex-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm rounded-[24px] p-5 relative overflow-hidden"
-                        onPress={() => router.push('/(admin)/departments')}
-                    >
-                        <View className="absolute right-[-10] top-[-10] w-20 h-20 bg-orange-50 dark:bg-orange-900/20 rounded-full opacity-50" />
-                        <View className="w-10 h-10 bg-orange-50 dark:bg-orange-900/30 rounded-xl items-center justify-center mb-4">
-                            <Building size={20} color="#EA580C" />
-                        </View>
-                        <Text className="text-gray-500 dark:text-gray-400 font-medium text-xs mb-1">Departments</Text>
-                        <Text className="text-2xl font-bold text-gray-900 dark:text-white">15</Text>
-                    </TouchableOpacity>
-                </View>
+            <ScrollView
+                className="flex-1"
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            >
+                <View className="p-5 space-y-6">
 
-                {/* Status Card */}
-                <Card className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm rounded-[24px] p-5 mb-8 relative overflow-hidden">
-                    <View className="absolute right-[-20] top-[-20] w-32 h-32 bg-teal-50 dark:bg-teal-900/20 rounded-full opacity-50" />
-                    <View className="flex-row justify-between items-start mb-2">
-                        <View className="w-12 h-12 bg-teal-50 dark:bg-teal-900/30 rounded-2xl items-center justify-center mb-4">
-                            <ClipboardCheck size={24} color="#0D9488" />
+                    {/* Section 1: Students Overview */}
+                    <View className="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm mb-6">
+                        <View className="flex-row justify-between items-center mb-4">
+                            <Text className="text-lg font-bold text-gray-900 dark:text-white">Students Overview</Text>
+                            <TouchableOpacity
+                                onPress={() => setFilterModalVisible(true)}
+                                className="flex-row items-center bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-full"
+                            >
+                                <Text className="text-xs font-semibold text-gray-700 dark:text-gray-300 mr-2">
+                                    {yearFilter ? `${getOrdinal(yearFilter)} Year` : 'All Years'}
+                                </Text>
+                                <Filter size={12} color={isDark ? "#D1D5DB" : "#374151"} />
+                            </TouchableOpacity>
                         </View>
-                        <View className="bg-teal-50 dark:bg-teal-900/20 px-2.5 py-1 rounded-full border border-teal-100 dark:border-teal-800">
-                            <Text className="text-teal-700 dark:text-teal-400 font-bold text-xs">Today</Text>
-                        </View>
-                    </View>
-                    <Text className="text-gray-500 dark:text-gray-400 font-medium text-sm mb-2">Attendance Status</Text>
-                    <View className="flex-row gap-6">
-                        <View>
-                            <Text className="text-2xl font-extrabold text-gray-900 dark:text-white">1,120</Text>
-                            <Text className="text-xs font-bold text-green-600 dark:text-green-400">Present</Text>
-                        </View>
-                        <View>
-                            <Text className="text-2xl font-extrabold text-gray-900 dark:text-white">130</Text>
-                            <Text className="text-xs font-bold text-red-500 dark:text-red-400">Absent</Text>
-                        </View>
-                    </View>
-                </Card>
 
-                {/* Quick Actions */}
-                <Text className="text-gray-400 dark:text-gray-500 font-bold text-xs mb-4 tracking-widest uppercase ml-1">QUICK ACTIONS</Text>
-                <View className="flex-row gap-4 mb-8">
-                    <TouchableOpacity
-                        className="flex-1 bg-white dark:bg-gray-800 p-4 rounded-[20px] shadow-sm border border-gray-100 dark:border-gray-700 items-start"
-                        onPress={() => router.push('/(admin)/students/add')}
-                    >
-                        <View className="w-10 h-10 bg-blue-600 rounded-full items-center justify-center mb-3">
-                            <Plus size={20} color="white" />
-                        </View>
-                        <Text className="font-bold text-gray-900 dark:text-white text-base">Add Student</Text>
-                        <Text className="text-gray-400 dark:text-gray-500 text-xs mt-1">Update roster</Text>
-                    </TouchableOpacity>
+                        <SortModal
+                            visible={filterModalVisible}
+                            onClose={() => setFilterModalVisible(false)}
+                            title="Filter by Year"
+                            options={[
+                                { label: 'All Years', value: 'all' },
+                                { label: '1st Year', value: '1' },
+                                { label: '2nd Year', value: '2' },
+                                { label: '3rd Year', value: '3' },
+                                { label: '4th Year', value: '4' }
+                            ]}
+                            selectedOption={yearFilter ? yearFilter.toString() : 'all'}
+                            onSelect={(val) => {
+                                setYearFilter(val === 'all' ? null : Number(val));
+                                setFilterModalVisible(false);
+                            }}
+                        />
 
-                    <TouchableOpacity className="flex-1 bg-white dark:bg-gray-800 p-4 rounded-[20px] shadow-sm border border-gray-100 dark:border-gray-700 items-start">
-                        <View className="w-10 h-10 bg-gray-900 dark:bg-gray-700 rounded-full items-center justify-center mb-3">
-                            <FileText size={20} color="white" />
-                        </View>
-                        <Text className="font-bold text-gray-900 dark:text-white text-base">Edit Curriculum</Text>
-                        <Text className="text-gray-400 dark:text-gray-500 text-xs mt-1">Manage courses</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {/* Attendance Chart Card */}
-                <Card className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 shadow-sm rounded-[24px] p-5 mb-8">
-                    <View className="flex-row justify-between items-start mb-6">
-                        <View>
-                            <Text className="text-xl font-bold text-gray-900 dark:text-white">Attendance</Text>
-                            <Text className="text-gray-400 dark:text-gray-500 text-xs mt-1">Weekly Overview</Text>
-                        </View>
+                        {/* Total Students Main Card */}
                         <TouchableOpacity
-                            className="bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-full flex-row items-center border border-blue-100 dark:border-blue-800"
-                            onPress={() => router.push('/(admin)/reports')}
+                            onPress={() => handleStudentStatPress('total')}
+                            className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl mb-4 border border-blue-100 dark:border-blue-800 flex-row justify-between items-center"
                         >
-                            <Text className="text-blue-600 dark:text-blue-400 text-[10px] font-bold mr-1">Full Report</Text>
-                            <ArrowUpRight size={10} color="#2563EB" />
+                            <View>
+                                <Text className="text-3xl font-bold text-blue-900 dark:text-blue-100">{stats.students.total}</Text>
+                                <Text className="text-xs font-medium text-blue-600 dark:text-blue-300">Total Students</Text>
+                            </View>
+                            <View className="w-10 h-10 bg-blue-100 dark:bg-blue-800 rounded-full items-center justify-center">
+                                <Users size={20} color="#1E40AF" />
+                            </View>
                         </TouchableOpacity>
-                    </View>
 
-                    <View className="flex-row items-center mb-6">
-                        <Text className="text-4xl font-extrabold text-gray-900 dark:text-white">95%</Text>
-                        <View className="ml-3 bg-green-50 dark:bg-green-900/20 px-2.5 py-1 rounded-full flex-row items-center border border-green-100 dark:border-green-800">
-                            <ArrowUpRight size={14} color="#16A34A" />
-                            <Text className="text-green-700 dark:text-green-400 font-bold text-xs ml-1">2.5%</Text>
+                        {/* Present / Absent Split */}
+                        <View className="flex-row justify-between">
+                            <TouchableOpacity
+                                onPress={() => handleStudentStatPress('present')}
+                                className="w-[48%] bg-green-50 dark:bg-green-900/20 p-3 rounded-xl border border-green-100 dark:border-green-800"
+                            >
+                                <Text className="text-xs font-medium text-green-600 dark:text-green-300 mb-1">Present</Text>
+                                <Text className="text-xl font-bold text-green-700 dark:text-green-100">{stats.students.present}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => handleStudentStatPress('absent')}
+                                className="w-[48%] bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-100 dark:border-red-800"
+                            >
+                                <Text className="text-xs font-medium text-red-600 dark:text-red-300 mb-1">Absent</Text>
+                                <Text className="text-xl font-bold text-red-700 dark:text-red-100">{stats.students.absent}</Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
 
-                    {/* SVG Chart */}
-                    <View className="h-32 w-full mb-4">
-                        <Svg height="100%" width="100%" viewBox="0 0 100 40" preserveAspectRatio="none">
-                            <Defs>
-                                <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                                    <Stop offset="0" stopColor={isDark ? "#3B82F6" : "#111827"} stopOpacity="1" />
-                                    <Stop offset="0.5" stopColor={isDark ? "#3B82F6" : "#111827"} stopOpacity="0.8" />
-                                    <Stop offset="1" stopColor={isDark ? "#3B82F6" : "#111827"} stopOpacity="0" />
-                                </LinearGradient>
-                            </Defs>
-                            {/* Smooth Layout (Mocked Path) */}
-                            <Path
-                                d="M0,25 C10,20 20,40 30,15 C40,5 50,30 60,20 C70,10 80,35 90,5 L100,10 L100,40 L0,40 Z"
-                                fill="url(#grad)"
-                            />
-                            <Path
-                                d="M0,25 C10,20 20,40 30,15 C40,5 50,30 60,20 C70,10 80,35 90,5 L100,10"
-                                stroke="#3B82F6"
-                                strokeWidth="0.5"
-                                fill="none"
-                            />
-                        </Svg>
+                    {/* Section 2: Faculty Overview */}
+                    <View className="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm mb-6">
+                        <View className="flex-row justify-between items-center mb-4">
+                            <Text className="text-lg font-bold text-gray-900 dark:text-white">Faculty Overview</Text>
+                            <TouchableOpacity
+                                onPress={() => router.push('/(admin)/faculty/attendance')}
+                                className="bg-blue-600 px-3 py-1.5 rounded-full flex-row items-center"
+                            >
+                                <Text className="text-white text-xs font-semibold mr-1">Mark Attendance</Text>
+                                <UserCheck size={12} color="white" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Total Faculty Main Card */}
+                        <TouchableOpacity
+                            onPress={() => handleFacultyStatPress('total')}
+                            className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-2xl mb-4 border border-purple-100 dark:border-purple-800 flex-row justify-between items-center"
+                        >
+                            <View>
+                                <Text className="text-3xl font-bold text-purple-900 dark:text-purple-100">{stats.faculty.total}</Text>
+                                <Text className="text-xs font-medium text-purple-600 dark:text-purple-300">Total Faculty</Text>
+                            </View>
+                            <View className="w-10 h-10 bg-purple-100 dark:bg-purple-800 rounded-full items-center justify-center">
+                                <UserCheck size={20} color="#6B21A8" />
+                            </View>
+                        </TouchableOpacity>
+
+                        {/* Present / Absent Split */}
+                        <View className="flex-row justify-between">
+                            <TouchableOpacity
+                                onPress={() => handleFacultyStatPress('present')}
+                                className="w-[48%] bg-green-50 dark:bg-green-900/20 p-3 rounded-xl border border-green-100 dark:border-green-800"
+                            >
+                                <Text className="text-xs font-medium text-green-600 dark:text-green-300 mb-1">Present</Text>
+                                <Text className="text-xl font-bold text-green-700 dark:text-green-100">{stats.faculty.present}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => handleFacultyStatPress('absent')}
+                                className="w-[48%] bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-100 dark:border-red-800"
+                            >
+                                <Text className="text-xs font-medium text-red-600 dark:text-red-300 mb-1">Absent</Text>
+                                <Text className="text-xl font-bold text-red-700 dark:text-red-100">{stats.faculty.absent}</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
-                    <View className="flex-row justify-between px-2">
-                        {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((day, i) => (
-                            <Text key={day} className="text-[10px] font-bold text-gray-300 dark:text-gray-600">
-                                {day}
-                            </Text>
-                        ))}
-                    </View>
-                </Card>
 
-                <View className="h-20" />
+
+                </View>
             </ScrollView>
+
+            <AnimatedAlert
+                visible={alertConfig.visible}
+                title={alertConfig.title}
+                message={alertConfig.message}
+                type={alertConfig.type}
+                onClose={() => setAlertConfig({ ...alertConfig, visible: false })}
+            />
+            <EducationLoader visible={refreshing} message="Refreshing..." />
         </SafeAreaView>
     );
 }

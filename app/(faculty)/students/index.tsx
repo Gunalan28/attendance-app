@@ -1,32 +1,61 @@
-import { View, Text, FlatList, TouchableOpacity, ScrollView, Image } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, ScrollView, Image, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, MoreVertical, Search, ChevronRight, SlidersHorizontal } from 'lucide-react-native';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Input from '../../../components/common/Input';
 import { useFacultyTheme } from '../../../components/context/FacultyContext';
+import { useAuth } from '../../../components/context/AuthContext';
+import { api } from '../../../services/api';
 
-// Mock Data
-const mockStudents = [
-    { id: '1', name: 'John Doe', roll: 'ID: 2023001', dept: 'Computer Science', attendance: 95, lastSeen: 'Today', status: 'online', initials: 'JD', color: 'bg-blue-100', textColor: 'text-blue-600' },
-    { id: '2', name: 'Alice Smith', roll: 'ID: 2023045', dept: 'Mathematics', attendance: 88, lastSeen: 'Yesterday', status: 'online', initials: 'AS', color: 'bg-pink-100', textColor: 'text-pink-600' },
-    { id: '3', name: 'Michael Brown', roll: 'ID: 2023012', dept: 'Physics', attendance: 65, lastSeen: 'Low Attendance', status: 'offline', initials: 'MB', warning: true, image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&q=80' },
-    { id: '4', name: 'Emily Johnson', roll: 'ID: 2023089', dept: 'Computer Science', attendance: 100, lastSeen: 'Today', status: 'online', initials: 'EJ', color: 'bg-cyan-100', textColor: 'text-cyan-600' },
-    { id: '5', name: 'David Williams', roll: 'ID: 2023056', dept: 'Engineering', attendance: 91, lastSeen: '2 days ago', status: 'offline', initials: 'DW', color: 'bg-purple-100', textColor: 'text-purple-600' },
-];
-
-const departments = ['All Departments', 'Computer Science', 'Engineering', 'Mathematics', 'Physics'];
+const DEMO_FACULTY_ID = 2;
 
 export default function StudentList() {
     const router = useRouter();
     const { isDark } = useFacultyTheme();
-    const [selectedDept, setSelectedDept] = useState('All Departments');
-    const [searchQuery, setSearchQuery] = useState('');
+    const { user } = useAuth();
+    const facultyId = user?.id || DEMO_FACULTY_ID;
 
-    const filteredStudents = mockStudents.filter(s => {
-        const matchesDept = selectedDept === 'All Departments' || s.dept === selectedDept;
-        const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.roll.toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesDept && matchesSearch;
+    const [students, setStudents] = useState<any[]>([]);
+    const [refreshing, setRefreshing] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [loading, setLoading] = useState(true);
+
+    const loadStudents = async () => {
+        try {
+            const data = await api.getAllFacultyStudents(facultyId);
+            // Process data to match UI needs (calculate percentage)
+            const processed = data.map((s: any) => {
+                const percentage = s.total_attendance > 0 ? Math.round((s.present_count / s.total_attendance) * 100) : 0;
+                return {
+                    ...s,
+                    attendance: percentage,
+                    initials: s.name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
+                    // Mock online status/last seen as backend doesn't track live socket status yet
+                    status: Math.random() > 0.5 ? 'online' : 'offline',
+                    lastSeen: 'Recently',
+                    warning: percentage < 75
+                };
+            });
+            setStudents(processed);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        loadStudents().finally(() => setRefreshing(false));
+    }, [facultyId]);
+
+    useEffect(() => {
+        loadStudents();
+    }, [facultyId]);
+
+    const filteredStudents = students.filter((s: any) => {
+        return s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.email.toLowerCase().includes(searchQuery.toLowerCase());
     });
 
     return (
@@ -45,29 +74,6 @@ export default function StudentList() {
             </View>
 
             <View className="flex-1 px-5 pt-4">
-                {/* Department Filters */}
-                <View className="mb-4">
-                    <View className="flex-row justify-between items-center mb-3">
-                        <Text className={`text-xs font-bold tracking-wider uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Filter by Department</Text>
-                        <TouchableOpacity>
-                            <Text className="text-blue-600 text-xs font-bold">View All</Text>
-                        </TouchableOpacity>
-                    </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
-                        {departments.map((dept, index) => (
-                            <TouchableOpacity
-                                key={index}
-                                onPress={() => setSelectedDept(dept)}
-                                className={`px-4 py-2.5 rounded-xl mr-3 border ${selectedDept === dept ? 'bg-blue-600 border-blue-600' : (isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200')}`}
-                            >
-                                <Text className={`font-bold text-xs ${selectedDept === dept ? 'text-white' : (isDark ? 'text-gray-300' : 'text-gray-700')}`}>
-                                    {dept}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-                </View>
-
                 {/* Search Bar */}
                 <View className="mb-6">
                     <Input
@@ -83,7 +89,7 @@ export default function StudentList() {
 
                 {/* List Header */}
                 <View className="flex-row justify-between items-center mb-4">
-                    <Text className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Student List</Text>
+                    <Text className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>All Students ({filteredStudents.length})</Text>
                     <TouchableOpacity className="flex-row items-center">
                         <SlidersHorizontal size={14} color="#3B82F6" />
                         <Text className="text-blue-600 font-bold text-xs ml-1">Sort by Name</Text>
@@ -93,34 +99,37 @@ export default function StudentList() {
                 {/* Student Cards */}
                 <FlatList
                     data={filteredStudents}
-                    keyExtractor={item => item.id}
+                    keyExtractor={item => String(item.id)}
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{ paddingBottom: 20 }}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                    ListEmptyComponent={
+                        <View className="items-center py-10">
+                            <Text className={`text-gray-400 ${isDark ? 'dark:text-gray-500' : ''}`}>No students found.</Text>
+                        </View>
+                    }
                     renderItem={({ item }) => (
                         <View className={`rounded-2xl p-4 mb-4 shadow-sm border ${item.warning ? 'border-yellow-200' : (isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100')}`}>
-                            <TouchableOpacity onPress={() => router.push(`/students/${item.id}`)} activeOpacity={0.7}>
+                            <TouchableOpacity onPress={() => router.push(`/(faculty)/students/${item.id}`)} activeOpacity={0.7}>
                                 {/* Top Section: Avatar & Info */}
                                 <View className="flex-row items-center mb-4">
                                     <View className="mr-4 relative">
-                                        {item.image ? (
-                                            <Image source={{ uri: item.image }} className="w-12 h-12 rounded-full" />
+                                        {item.profile_image ? (
+                                            <Image source={{ uri: item.profile_image }} className="w-12 h-12 rounded-full" />
                                         ) : (
-                                            <View className={`w-12 h-12 rounded-full items-center justify-center ${item.color}`}>
-                                                <Text className={`font-bold text-lg ${item.textColor}`}>{item.initials}</Text>
+                                            <View className={`w-12 h-12 rounded-full items-center justify-center bg-blue-100`}>
+                                                <Text className={`font-bold text-lg text-blue-600`}>{item.initials}</Text>
                                             </View>
                                         )}
                                         {item.status === 'online' && (
                                             <View className={`absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 ${isDark ? 'border-gray-800' : 'border-white'}`} />
-                                        )}
-                                        {item.status === 'offline' && (
-                                            <View className={`absolute bottom-0 right-0 w-3.5 h-3.5 bg-gray-400 rounded-full border-2 ${isDark ? 'border-gray-800' : 'border-white'}`} />
                                         )}
                                     </View>
                                     <View className="flex-1">
                                         <View className="flex-row justify-between items-center">
                                             <View>
                                                 <Text className={`font-bold text-base ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.name}</Text>
-                                                <Text className="text-gray-500 text-xs mt-0.5">{item.roll} • {item.dept}</Text>
+                                                <Text className="text-gray-500 text-xs mt-0.5">{item.email}</Text>
                                             </View>
                                             <ChevronRight size={20} color="#D1D5DB" />
                                         </View>
